@@ -1,17 +1,57 @@
 syntax = "proto3";
 
 option go_package = "github.com/zhanchengsong/grpc-chat/chatservice";
-
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
 package chatservice; 
 
 service Chat {
     rpc SayHello(HelloRequest) returns (HelloReply) {}
+    rpc SendChatAndPresence(stream ChatAndPresenceMessage) returns (google.protobuf.Empty) {}
+    rpc ReceiveChatAndPresence(StartReceivingChatsRequest) returns (stream ChatAndPresenceMessage) {}
 }
 
+// Remove this after initial creation 
 message HelloRequest {
     string name = 1; 
 }
 
 message HelloReply {
     string message = 1;
+}
+
+message StartReceivingChatsRequest {
+    string userId = 1;
+    string jwtToken = 2;
+}
+
+message ChatAndPresenceMessage {
+    string messageId = 1;
+    string to = 2;
+    string msg = 3;
+    string url = 4;
+    bytes dataBytes = 5;
+    ChatType chatType = 6;
+    google.protobuf.Timestamp timestamp = 7;
+}
+
+
+message ChatMessageReply {
+    string messageId = 1;
+    string forMessageId = 2;
+    ChatStatus chatStatus = 3;
+}
+
+enum ChatType {
+    TEXT = 0;
+    IMAGE = 1;
+    VIDEO = 2;
+    FILE = 3;
+    PRESENCE = 4;
+}
+
+enum ChatStatus {
+    RECEIVED_BY_SERVER = 0;
+    DELIVERED_TO_DEST = 1;
+    SEEN_BY_RECEIVER = 2;
 }

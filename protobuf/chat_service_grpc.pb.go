@@ -8,6 +8,7 @@ package chatservice
 
 import (
 	context "context"
+	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -23,6 +24,8 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ChatClient interface {
 	SayHello(ctx context.Context, in *HelloRequest, opts ...grpc.CallOption) (*HelloReply, error)
+	SendChatAndPresence(ctx context.Context, opts ...grpc.CallOption) (Chat_SendChatAndPresenceClient, error)
+	ReceiveChatAndPresence(ctx context.Context, in *StartReceivingChatsRequest, opts ...grpc.CallOption) (Chat_ReceiveChatAndPresenceClient, error)
 }
 
 type chatClient struct {
@@ -42,11 +45,79 @@ func (c *chatClient) SayHello(ctx context.Context, in *HelloRequest, opts ...grp
 	return out, nil
 }
 
+func (c *chatClient) SendChatAndPresence(ctx context.Context, opts ...grpc.CallOption) (Chat_SendChatAndPresenceClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Chat_ServiceDesc.Streams[0], "/chatservice.Chat/SendChatAndPresence", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &chatSendChatAndPresenceClient{stream}
+	return x, nil
+}
+
+type Chat_SendChatAndPresenceClient interface {
+	Send(*ChatAndPresenceMessage) error
+	CloseAndRecv() (*empty.Empty, error)
+	grpc.ClientStream
+}
+
+type chatSendChatAndPresenceClient struct {
+	grpc.ClientStream
+}
+
+func (x *chatSendChatAndPresenceClient) Send(m *ChatAndPresenceMessage) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *chatSendChatAndPresenceClient) CloseAndRecv() (*empty.Empty, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	m := new(empty.Empty)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *chatClient) ReceiveChatAndPresence(ctx context.Context, in *StartReceivingChatsRequest, opts ...grpc.CallOption) (Chat_ReceiveChatAndPresenceClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Chat_ServiceDesc.Streams[1], "/chatservice.Chat/ReceiveChatAndPresence", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &chatReceiveChatAndPresenceClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Chat_ReceiveChatAndPresenceClient interface {
+	Recv() (*ChatAndPresenceMessage, error)
+	grpc.ClientStream
+}
+
+type chatReceiveChatAndPresenceClient struct {
+	grpc.ClientStream
+}
+
+func (x *chatReceiveChatAndPresenceClient) Recv() (*ChatAndPresenceMessage, error) {
+	m := new(ChatAndPresenceMessage)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // ChatServer is the server API for Chat service.
 // All implementations must embed UnimplementedChatServer
 // for forward compatibility
 type ChatServer interface {
 	SayHello(context.Context, *HelloRequest) (*HelloReply, error)
+	SendChatAndPresence(Chat_SendChatAndPresenceServer) error
+	ReceiveChatAndPresence(*StartReceivingChatsRequest, Chat_ReceiveChatAndPresenceServer) error
 	mustEmbedUnimplementedChatServer()
 }
 
@@ -56,6 +127,12 @@ type UnimplementedChatServer struct {
 
 func (UnimplementedChatServer) SayHello(context.Context, *HelloRequest) (*HelloReply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SayHello not implemented")
+}
+func (UnimplementedChatServer) SendChatAndPresence(Chat_SendChatAndPresenceServer) error {
+	return status.Errorf(codes.Unimplemented, "method SendChatAndPresence not implemented")
+}
+func (UnimplementedChatServer) ReceiveChatAndPresence(*StartReceivingChatsRequest, Chat_ReceiveChatAndPresenceServer) error {
+	return status.Errorf(codes.Unimplemented, "method ReceiveChatAndPresence not implemented")
 }
 func (UnimplementedChatServer) mustEmbedUnimplementedChatServer() {}
 
@@ -88,6 +165,53 @@ func _Chat_SayHello_Handler(srv interface{}, ctx context.Context, dec func(inter
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Chat_SendChatAndPresence_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ChatServer).SendChatAndPresence(&chatSendChatAndPresenceServer{stream})
+}
+
+type Chat_SendChatAndPresenceServer interface {
+	SendAndClose(*empty.Empty) error
+	Recv() (*ChatAndPresenceMessage, error)
+	grpc.ServerStream
+}
+
+type chatSendChatAndPresenceServer struct {
+	grpc.ServerStream
+}
+
+func (x *chatSendChatAndPresenceServer) SendAndClose(m *empty.Empty) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *chatSendChatAndPresenceServer) Recv() (*ChatAndPresenceMessage, error) {
+	m := new(ChatAndPresenceMessage)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func _Chat_ReceiveChatAndPresence_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(StartReceivingChatsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ChatServer).ReceiveChatAndPresence(m, &chatReceiveChatAndPresenceServer{stream})
+}
+
+type Chat_ReceiveChatAndPresenceServer interface {
+	Send(*ChatAndPresenceMessage) error
+	grpc.ServerStream
+}
+
+type chatReceiveChatAndPresenceServer struct {
+	grpc.ServerStream
+}
+
+func (x *chatReceiveChatAndPresenceServer) Send(m *ChatAndPresenceMessage) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 // Chat_ServiceDesc is the grpc.ServiceDesc for Chat service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -100,6 +224,17 @@ var Chat_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Chat_SayHello_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "SendChatAndPresence",
+			Handler:       _Chat_SendChatAndPresence_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "ReceiveChatAndPresence",
+			Handler:       _Chat_ReceiveChatAndPresence_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "protobuf/chat_service.proto",
 }
